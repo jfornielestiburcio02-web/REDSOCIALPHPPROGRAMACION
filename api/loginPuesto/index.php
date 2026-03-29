@@ -1,118 +1,178 @@
 <?php
-// 1. PROTECCIÓN DE RUTA (Lógica Privada por URL)
-// Extraemos el token largo que viene en la URL (?auth_token=...)
+// 1. PROTECCIÓN DE RUTA
 $tokenUrl = $_GET['auth_token'] ?? null;
 
-// Si el token no existe o es demasiado corto para ser real, denegamos el acceso
+// Si no hay token o es inválido, expulsar
 if (!$tokenUrl || strlen($tokenUrl) < 50) {
-    header("Location: /index.xlx"); // Te expulsa al inicio si no hay token
+    header("Location: /index.xlx");
     exit;
 }
 
-// 2. PROCESAMIENTO DEL FORMULARIO (PHP)
-$mensaje = "";
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['nombre_noticia'])) {
-    $projectId = "informaticadesde0";
-    $url = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/solicitudNoticia";
-
-    // Datos que enviamos a Firebase (REST API)
-    $postData = [
-        "fields" => [
-            "nombre" => ["stringValue" => $_POST['nombre_noticia']],
-            "titulo_grande" => ["stringValue" => $_POST['titulo_grande']],
-            "noticia" => ["stringValue" => $_POST['cuerpo_noticia']],
-            "imagen" => ["stringValue" => $_POST['imagen_url']],
-            "pendiente" => ["booleanValue" => true],
-            "secreto" => ["stringValue" => "SECRETO_CREA_NOTICIA_HTML"]
-        ]
-    ];
-
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($postData));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    if ($httpCode === 200) {
-        $mensaje = "<div class='msg-success'>✔ Solicitud enviada correctamente. Se procesará pronto.</div>";
-    } else {
-        $mensaje = "<div class='msg-error'>Error al conectar con Firebase (Code: $httpCode)</div>";
-    }
+// 2. LÓGICA DE CERRAR SESIÓN
+if (isset($_GET['logout'])) {
+    // Redirigimos al inicio sin el token, limpiando la sesión visual
+    header("Location: /index.xlx");
+    exit;
 }
 ?>
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
 <html lang="es">
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-    <title>Panel Privado - INFORMATICADESDECERO</title>
+    <title>Panel de Control - INFORMATICADESDECERO</title>
     <style>
-        body { font-family: Verdana, Geneva, sans-serif; background-color: #f0f2f5; color: #333; margin: 0; padding: 20px; }
-        .container { max-width: 800px; margin: auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); }
-        
-        h1 { color: #000; border-bottom: 4px solid #000; padding-bottom: 15px; text-transform: uppercase; font-size: 24px; text-align: center; }
-        h2 { font-size: 18px; margin-top: 30px; color: #444; border-left: 5px solid #000; padding-left: 10px; }
+        /* Pantalla Completa y Reset */
+        html, body { 
+            height: 100%; 
+            margin: 0; 
+            padding: 0; 
+            font-family: Verdana, Geneva, sans-serif; 
+            background-color: #f0f0f0; 
+        }
 
-        .token-display { font-size: 9px; color: #bbb; word-break: break-all; margin-bottom: 20px; text-align: center; }
-        
-        .search-box { background: #f8f9fa; border: 1px solid #ddd; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-        input[type="text"], textarea { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 6px; font-family: Verdana; box-sizing: border-box; font-size: 14px; }
-        
-        .btn-ok { background-color: #000; color: #fff; border: none; padding: 18px; cursor: pointer; font-weight: bold; width: 100%; font-size: 16px; border-radius: 6px; transition: 0.3s; margin-top: 10px; }
-        .btn-ok:hover { background-color: #333; transform: translateY(-1px); }
+        /* Cabecera de Siempre (Mejorada) */
+        .header-full {
+            background-color: #000;
+            color: #fff;
+            padding: 40px 0;
+            text-align: center;
+            position: relative;
+            border-bottom: 8px solid #333;
+        }
+        .header-full h1 {
+            margin: 0;
+            font-size: 50px;
+            letter-spacing: -2px;
+            text-transform: uppercase;
+        }
+        .header-full .sub {
+            font-size: 14px;
+            letter-spacing: 5px;
+            color: #aaa;
+            margin-top: 10px;
+        }
 
-        .msg-success { background: #d4edda; color: #155724; padding: 15px; border-radius: 6px; margin-bottom: 20px; font-weight: bold; text-align: center; }
-        .msg-error { background: #f8d7da; color: #721c24; padding: 15px; border-radius: 6px; margin-bottom: 20px; text-align: center; }
+        /* Botón Cerrar Sesión */
+        .btn-logout {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: transparent;
+            color: #ff4444;
+            border: 1px solid #ff4444;
+            padding: 8px 15px;
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            transition: 0.3s;
+        }
+        .btn-logout:hover {
+            background: #ff4444;
+            color: #fff;
+        }
 
-        .noticia-item { border: 1px dashed #ccc; padding: 15px; background: #fafafa; margin-bottom: 10px; font-size: 13px; }
-        .footer-note { font-size: 11px; color: #888; margin-top: 20px; text-align: center; }
+        /* Contenido Principal */
+        .main-content {
+            padding: 40px;
+            max-width: 1200px;
+            margin: auto;
+            min-height: 60vh;
+        }
+
+        .section-box {
+            background: #fff;
+            padding: 30px;
+            border-radius: 4px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+            margin-bottom: 30px;
+        }
+
+        h2 { border-bottom: 2px solid #000; padding-bottom: 10px; margin-top: 0; }
+
+        /* Buscador */
+        .search-container input {
+            width: 100%;
+            padding: 20px;
+            font-size: 18px;
+            border: 2px solid #eee;
+            font-family: Verdana;
+            box-sizing: border-box;
+        }
+
+        /* Noticia Reciente */
+        .noticia-card {
+            background: #fff;
+            border: 1px solid #ddd;
+            padding: 20px;
+            margin-top: 10px;
+        }
+
+        /* Botón Crear Nueva (Abajo del todo) */
+        .footer-actions {
+            text-align: center;
+            padding: 50px 0;
+            background: #fff;
+            border-top: 1px solid #ddd;
+        }
+        .btn-crear-nueva {
+            background-color: #000;
+            color: #fff;
+            padding: 20px 50px;
+            text-decoration: none;
+            font-size: 20px;
+            font-weight: bold;
+            display: inline-block;
+            border-radius: 50px;
+            transition: 0.3s;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        .btn-crear-nueva:hover {
+            transform: scale(1.05);
+            background-color: #333;
+        }
+
+        .token-info {
+            text-align: center;
+            font-size: 10px;
+            color: #ccc;
+            margin-top: 20px;
+        }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>INFORMATICADESDECERO</h1>
-    
-    <div class="token-display">Sesión verificada: <?php echo substr($tokenUrl, 0, 30); ?>...</div>
-    
-    <?php echo $mensaje; ?>
-
-    <div class="search-box">
-        <strong>Busqueda de noticias</strong>
-        <input type="text" placeholder="Escribe el nombre de una noticia existente...">
+    <div class="header-full">
+        <a href="?logout=true" class="btn-logout">Cerrar Sesión</a>
+        <h1>INFORMATICADESDECERO</h1>
+        <div class="sub">PANEL DE ADMINISTRACIÓN PRIVADO</div>
     </div>
 
-    <h2>Recientes:</h2>
-    <div class="noticia-item">
-        📌 <i>No hay noticias publicadas recientemente.</i>
+    <div class="main-content">
+        
+        <div class="section-box">
+            <h2>Busqueda de noticias</h2>
+            <div class="search-container">
+                <input type="text" placeholder="¿Qué noticia estás buscando?">
+            </div>
+        </div>
+
+        <div class="section-box">
+            <h2>Recientes:</h2>
+            <div class="noticia-card">
+                <strong>No hay actividad reciente.</strong>
+                <p style="color: #888;">Las noticias que solicites aparecerán aquí una vez sean procesadas.</p>
+            </div>
+        </div>
+
     </div>
 
-    <h2>Solicitud de crear noticia</h2>
-    <form method="POST" action="">
-        <label><b>Nombre de la noticia (Slug):</b></label>
-        <input type="text" name="nombre_noticia" placeholder="ej: gran-avance-tecnologico" required>
-
-        <label><b>TÍTULO GRANDE:</b></label>
-        <input type="text" name="titulo_grande" placeholder="El titular principal..." required>
-
-        <label><b>NOTICIA (Contenido):</b></label>
-        <textarea name="cuerpo_noticia" rows="8" placeholder="Escribe aquí el texto completo..." required></textarea>
-
-        <label><b>Agregar imagen (URL):</b></label>
-        <input type="text" name="imagen_url" placeholder="https://dominio.com/imagen.jpg">
-
-        <button type="submit" class="btn-ok">OK - ENVIAR A REVISIÓN</button>
-    </form>
-
-    <p class="footer-note">Estado actual: <b>PENDIENTE</b> hasta validación por secreto del repo.</p>
-</div>
-
-<div class="container" style="margin-top: 20px; border-top: 6px solid #4285F4; padding-top: 10px;">
-    <h3 style="font-size: 16px;">Comentarios de la comunidad</h3>
-    <p style="font-size: 12px; color: #777;">Próximamente: Sistema de opiniones con imagen y nombre de usuario.</p>
-</div>
+    <div class="footer-actions">
+        <a href="/crea_noticia.xlx?auth_token=<?php echo $tokenUrl; ?>" class="btn-crear-nueva">
+            + SOLICITAR CREAR NOTICIA
+        </a>
+        <div class="token-info">Sesión Activa: <?php echo substr($tokenUrl, 0, 40); ?>...</div>
+    </div>
 
 </body>
 </html>
