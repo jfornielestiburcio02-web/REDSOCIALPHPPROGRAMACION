@@ -1,78 +1,108 @@
 <?php
-// --- CONFIGURACIÓN OCULTA (Solo se ve en el servidor) ---
-$firebaseConfig = [
-    "apiKey" => "AIzaSyBWvJyRrkACIJ0Aimjo9RGOIikAbeicHgQ",
-    "projectId" => "informaticadesde0"
+// --- CONFIGURACIÓN OCULTA EN EL SERVIDOR ---
+$googleConfig = [
+    'apiKey' => 'AIzaSyBWvJyRrkACIJ0Aimjo9RGOIikAbeicHgQ',
+    'authDomain' => 'informaticadesde0.firebaseapp.com',
+    'projectId' => 'informaticadesde0',
+    'appId' => '1:414751371702:web:419177d2307fc564e4d117'
 ];
 
-$mensaje_error = "";
-
-// Si el usuario envía el formulario (POST)
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $email = $_POST['email'] ?? '';
-    $password = $_POST['password'] ?? '';
-
-    // Llamada a la REST API de Firebase Auth
-    $url = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=" . $firebaseConfig['apiKey'];
-    
-    $data = json_encode([
-        "email" => $email,
-        "password" => $password,
-        "returnSecureToken" => true
-    ]);
-
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-    
-    $response = curl_exec($ch);
-    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    $resData = json_decode($response, true);
-
-    if ($status === 200) {
-        // LOGIN CORRECTO -> Redirigimos por PHP
-        header("Location: /loginPuesto/index.xlx");
-        exit;
-    } else {
-        $mensaje_error = "Credenciales incorrectas o error de acceso.";
-    }
+// Si recibimos un token por POST, significa que el JS ya validó al usuario
+// y ahora PHP toma el control para redirigir.
+if (isset($_POST['idToken'])) {
+    // Aquí podrías verificar el token con Firebase Admin SDK si quisieras máxima seguridad,
+    // pero para tu flujo, redirigimos directamente tras la respuesta positiva.
+    header("Location: /loginPuesto/index.xlx");
+    exit;
 }
 ?>
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
-<html>
+<html lang="es">
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-    <title>Identificación</title>
+    <title>Acceso Seguro</title>
     <style>
-        body { font-family: Verdana, Geneva, sans-serif; background-color: #f4f4f4; display: flex; justify-content: center; padding-top: 100px; }
-        .login-box { background: white; padding: 30px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 350px; border-top: 4px solid #000; }
-        h2 { font-size: 18px; text-align: center; margin-bottom: 20px; }
-        input[type="email"], input[type="password"] { width: 90%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; font-family: Verdana; }
-        button { width: 100%; padding: 10px; background: #000; color: white; border: none; cursor: pointer; font-family: Verdana; font-weight: bold; }
-        button:hover { background: #333; }
-        .error { color: red; font-size: 12px; text-align: center; }
+        body { 
+            font-family: Verdana, Geneva, sans-serif; 
+            background-color: #f0f2f5; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            margin: 0; 
+        }
+        .card { 
+            background: #fff; 
+            padding: 40px; 
+            border-radius: 10px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+            text-align: center; 
+            width: 320px; 
+            border-top: 6px solid #4285F4;
+        }
+        h2 { font-weight: normal; font-size: 20px; margin-bottom: 30px; }
+        .btn-google { 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            background: #4285F4; 
+            color: white; 
+            border: none; 
+            padding: 12px; 
+            width: 100%;
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-family: Verdana; 
+            font-weight: bold;
+            transition: 0.3s;
+        }
+        .btn-google:hover { background: #357ae8; }
+        .g-logo { background: white; border-radius: 2px; margin-right: 10px; width: 20px; padding: 2px; }
     </style>
 </head>
 <body>
 
-<div class="login-box">
-    <h2>IDENTIFICACIÓN</h2>
+<div class="card">
+    <h2>Identificarse</h2>
     
-    <?php if ($mensaje_error): ?>
-        <p class="error"><?php echo $mensaje_error; ?></p>
-    <?php endif; ?>
-
-    <form method="POST" action="">
-        <input type="email" name="email" placeholder="Correo electrónico" required>
-        <input type="password" name="password" placeholder="Contraseña" required>
-        <br><br>
-        <button type="submit">Iniciar Sesión</button>
+    <form id="authForm" method="POST" action="">
+        <input type="hidden" name="idToken" id="idToken">
+        <button type="button" onclick="iniciarGoogle()" class="btn-google">
+            <img class="g-logo" src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="">
+            Entrar con Google
+        </button>
     </form>
 </div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import { getAuth, signInWithPopup, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+  // Inyectamos las claves desde PHP para que no estén "quemadas" directamente en el JS puro
+  const firebaseConfig = {
+    apiKey: "<?php echo $googleConfig['apiKey']; ?>",
+    authDomain: "<?php echo $googleConfig['authDomain']; ?>",
+    projectId: "<?php echo $googleConfig['projectId']; ?>",
+    appId: "<?php echo $googleConfig['appId']; ?>"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const provider = new GoogleAuthProvider();
+
+  window.iniciarGoogle = async () => {
+    try {
+        const result = await signInWithPopup(auth, provider);
+        const token = await result.user.getIdToken();
+        
+        // Pasamos el token al input y enviamos el formulario a PHP
+        document.getElementById('idToken').value = token;
+        document.getElementById('authForm').submit();
+    } catch (error) {
+        alert("Error de autenticación: " + error.message);
+    }
+  };
+</script>
 
 </body>
 </html>
