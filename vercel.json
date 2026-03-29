@@ -4,10 +4,14 @@
       "runtime": "vercel-php@0.7.1"
     }
   },
-  "routes": [
-    {
-      "src": "/(.*).xlx",
-      "dest": "/api/$1.php"
+  "rewrites": [
+    { 
+      "source": "/noticias/informaticadesdecero/(.*)", 
+      "destination": "/api/noticia_maestra.php?slug=$1" 
+    },
+    { 
+      "source": "/(.*).xlx", 
+      "destination": "/api/$1.php" 
     }
   ]
 }
