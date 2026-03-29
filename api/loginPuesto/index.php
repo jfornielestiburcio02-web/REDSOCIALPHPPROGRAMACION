@@ -1,8 +1,11 @@
 <?php
-// 1. PROTECCIÓN DE RUTA (Lógica Privada)
-// Si no existe la cookie que pusimos en el login, lo expulsa
-if (!isset($_COOKIE['fb_token'])) {
-    header("Location: /index.xlx");
+// 1. PROTECCIÓN DE RUTA (Lógica Privada por URL)
+// Extraemos el token largo que viene en la URL (?auth_token=...)
+$tokenUrl = $_GET['auth_token'] ?? null;
+
+// Si el token no existe o es demasiado corto para ser real, denegamos el acceso
+if (!$tokenUrl || strlen($tokenUrl) < 50) {
+    header("Location: /index.xlx"); // Te expulsa al inicio si no hay token
     exit;
 }
 
@@ -12,7 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['nombre_noticia'])) {
     $projectId = "informaticadesde0";
     $url = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/solicitudNoticia";
 
-    // Datos que enviamos a Firebase
+    // Datos que enviamos a Firebase (REST API)
     $postData = [
         "fields" => [
             "nombre" => ["stringValue" => $_POST['nombre_noticia']],
@@ -20,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['nombre_noticia'])) {
             "noticia" => ["stringValue" => $_POST['cuerpo_noticia']],
             "imagen" => ["stringValue" => $_POST['imagen_url']],
             "pendiente" => ["booleanValue" => true],
-            "secreto" => ["stringValue" => "SECRETO_CREA_NOTICIA_HTML"] // Tu clave del repo
+            "secreto" => ["stringValue" => "SECRETO_CREA_NOTICIA_HTML"]
         ]
     ];
 
@@ -34,9 +37,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['nombre_noticia'])) {
     curl_close($ch);
 
     if ($httpCode === 200) {
-        $mensaje = "<p style='color:green; font-weight:bold;'>✔ Solicitud enviada correctamente como PENDIENTE.</p>";
+        $mensaje = "<div class='msg-success'>✔ Solicitud enviada correctamente. Se procesará pronto.</div>";
     } else {
-        $mensaje = "<p style='color:red;'>Error al enviar a Firebase. Código: $httpCode</p>";
+        $mensaje = "<div class='msg-error'>Error al conectar con Firebase (Code: $httpCode)</div>";
     }
 }
 ?>
@@ -46,66 +49,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['nombre_noticia'])) {
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <title>Panel Privado - INFORMATICADESDECERO</title>
     <style>
-        body { font-family: Verdana, Geneva, sans-serif; background-color: #f8f9fa; color: #333; margin: 0; padding: 20px; }
-        .container { max-width: 800px; margin: auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        body { font-family: Verdana, Geneva, sans-serif; background-color: #f0f2f5; color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); }
         
-        h1 { color: #000; border-bottom: 3px solid #000; padding-bottom: 10px; text-transform: uppercase; font-size: 22px; }
-        h2 { font-size: 18px; margin-top: 30px; color: #555; }
+        h1 { color: #000; border-bottom: 4px solid #000; padding-bottom: 15px; text-transform: uppercase; font-size: 24px; text-align: center; }
+        h2 { font-size: 18px; margin-top: 30px; color: #444; border-left: 5px solid #000; padding-left: 10px; }
 
-        .search-box { background: #e9ecef; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
-        input[type="text"], textarea { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ccc; border-radius: 4px; font-family: Verdana; box-sizing: border-box; }
+        .token-display { font-size: 9px; color: #bbb; word-break: break-all; margin-bottom: 20px; text-align: center; }
         
-        .btn-ok { background-color: #000; color: #fff; border: none; padding: 15px 25px; cursor: pointer; font-weight: bold; width: 100%; font-size: 16px; transition: 0.3s; }
-        .btn-ok:hover { background-color: #333; }
+        .search-box { background: #f8f9fa; border: 1px solid #ddd; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        input[type="text"], textarea { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 6px; font-family: Verdana; box-sizing: border-box; font-size: 14px; }
+        
+        .btn-ok { background-color: #000; color: #fff; border: none; padding: 18px; cursor: pointer; font-weight: bold; width: 100%; font-size: 16px; border-radius: 6px; transition: 0.3s; margin-top: 10px; }
+        .btn-ok:hover { background-color: #333; transform: translateY(-1px); }
 
-        .noticia-item { border-left: 4px solid #ffc107; padding: 10px; background: #fff9e6; margin-bottom: 10px; font-size: 14px; }
-        .footer-note { font-size: 11px; color: #777; margin-top: 15px; }
+        .msg-success { background: #d4edda; color: #155724; padding: 15px; border-radius: 6px; margin-bottom: 20px; font-weight: bold; text-align: center; }
+        .msg-error { background: #f8d7da; color: #721c24; padding: 15px; border-radius: 6px; margin-bottom: 20px; text-align: center; }
+
+        .noticia-item { border: 1px dashed #ccc; padding: 15px; background: #fafafa; margin-bottom: 10px; font-size: 13px; }
+        .footer-note { font-size: 11px; color: #888; margin-top: 20px; text-align: center; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>INFORMATICADESDECERO - PANEL</h1>
+    <h1>INFORMATICADESDECERO</h1>
+    
+    <div class="token-display">Sesión verificada: <?php echo substr($tokenUrl, 0, 30); ?>...</div>
     
     <?php echo $mensaje; ?>
 
     <div class="search-box">
         <strong>Busqueda de noticias</strong>
-        <input type="text" placeholder="Escribe para buscar...">
+        <input type="text" placeholder="Escribe el nombre de una noticia existente...">
     </div>
 
     <h2>Recientes:</h2>
     <div class="noticia-item">
-        ⚠️ <i>No hay noticias aprobadas hoy. Revisa las solicitudes pendientes abajo.</i>
+        📌 <i>No hay noticias publicadas recientemente.</i>
     </div>
-
-    <hr style="margin: 40px 0; border: 0; border-top: 1px double #ccc;">
 
     <h2>Solicitud de crear noticia</h2>
     <form method="POST" action="">
-        <label>Nombre de la noticia (Identificador):</label>
-        <input type="text" name="nombre_noticia" placeholder="ej: noticia-nueva-ia" required>
+        <label><b>Nombre de la noticia (Slug):</b></label>
+        <input type="text" name="nombre_noticia" placeholder="ej: gran-avance-tecnologico" required>
 
-        <label>TÍTULO GRANDE:</label>
-        <input type="text" name="titulo_grande" placeholder="Escribe el titular aquí..." required>
+        <label><b>TÍTULO GRANDE:</b></label>
+        <input type="text" name="titulo_grande" placeholder="El titular principal..." required>
 
-        <label>NOTICIA (Cuerpo):</label>
-        <textarea name="cuerpo_noticia" rows="6" placeholder="Escribe el contenido de la noticia..." required></textarea>
+        <label><b>NOTICIA (Contenido):</b></label>
+        <textarea name="cuerpo_noticia" rows="8" placeholder="Escribe aquí el texto completo..." required></textarea>
 
-        <label>Agregar imagen (URL):</label>
-        <input type="text" name="imagen_url" placeholder="https://enlace-a-tu-imagen.jpg">
+        <label><b>Agregar imagen (URL):</b></label>
+        <input type="text" name="imagen_url" placeholder="https://dominio.com/imagen.jpg">
 
         <button type="submit" class="btn-ok">OK - ENVIAR A REVISIÓN</button>
     </form>
 
-    <p class="footer-note">Al pulsar OK, la noticia se enviará a la colección <b>solicitudNoticia</b> con estado pendiente.</p>
+    <p class="footer-note">Estado actual: <b>PENDIENTE</b> hasta validación por secreto del repo.</p>
 </div>
 
-<div class="container" style="margin-top: 20px; border-top: 4px solid #4285F4;">
-    <h3>Vista previa de Comentarios</h3>
-    <div style="font-size: 13px; color: #666;">
-        <p>Los usuarios podrán comentar con su <b>Imagen, Nombre y Opinión</b> una vez la noticia sea publicada.</p>
-    </div>
+<div class="container" style="margin-top: 20px; border-top: 6px solid #4285F4; padding-top: 10px;">
+    <h3 style="font-size: 16px;">Comentarios de la comunidad</h3>
+    <p style="font-size: 12px; color: #777;">Próximamente: Sistema de opiniones con imagen y nombre de usuario.</p>
 </div>
 
 </body>
