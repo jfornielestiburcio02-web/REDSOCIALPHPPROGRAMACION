@@ -1,0 +1,17 @@
+{
+  "functions": {
+    "api/**/*.php": {
+      "runtime": "vercel-php@0.7.5"
+    }
+  },
+  "routes": [
+    {
+      "src": "/(.*).xlx",
+      "dest": "/api/$1.php"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/$1.php"
+    }
+  ]
+}
