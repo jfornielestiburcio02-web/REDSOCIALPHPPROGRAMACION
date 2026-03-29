@@ -1,178 +1,113 @@
 <?php
-// 1. SEGURIDAD: Token de Google (Viene del login anterior)
+// 1. CONFIGURACIÓN DE SEGURIDAD (Token de Google para entrar al panel)
 $tokenUrl = $_GET['auth_token'] ?? null;
 if (!$tokenUrl || strlen($tokenUrl) < 50) {
     header("Location: /index.xlx");
     exit;
 }
 
-$projectId = "informaticadesde0";
+// 2. TUS DATOS DE GITHUB (Cámbialos por los tuyos)
+$repoOwner = "TU_USUARIO_DE_GITHUB"; 
+$repoName = "TU_NOMBRE_DE_REPO";
+$githubToken = "SECRETO_CREA_NOTICIA_HTML"; // <--- AQUÍ ESTÁ TU SECRETO
+
 $mensaje = "";
-$superUserAuth = false;
 
-// 2. LOGIN DE SUPERUSUARIO (PHP PRIVADO)
-if (isset($_POST['login_super'])) {
-    $userEntry = $_POST['user_name'];
-    $passEntry = $_POST['user_pass'];
-
-    $url = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/usuarios/" . urlencode($userEntry);
-    $json = @file_get_contents($url);
-    
-    if ($json) {
-        $data = json_decode($json, true);
-        $realPass = $data['fields']['contrasena']['stringValue'] ?? '';
-
-        if ($passEntry === $realPass) {
-            $superUserAuth = true;
-            $mensaje = "<div class='success'>MODO SUPERUSUARIO ACTIVADO. Puedes autorizar noticias.</div>";
-        } else {
-            $mensaje = "<div class='error'>Contraseña de Superusuario incorrecta.</div>";
-        }
-    }
-}
-
-// 3. ACCIÓN DE CREAR (APLICAR TOKEN SECRETO)
 if (isset($_POST['crear_final'])) {
-    $docId = $_POST['doc_id']; 
     $slug = $_POST['slug'];
-    $tokenSecreto = "SECRETO_CREA_NOTICIA_HTML"; // EL TOKEN QUE ACTIVA MAESTRA.PHP
+    $titulo = $_POST['titulo_grande'];
+    $cuerpo = $_POST['cuerpo_noticia'];
+    $imagen = $_POST['imagen_url'];
 
-    $updateUrl = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/solicitudNoticia/" . $docId . "?updateMask.fieldPaths=secreto&updateMask.fieldPaths=pendiente";
+    // RUTA DONDE SE CREARÁ EL ARCHIVO FÍSICO
+    $path = "noticias/informaticadesdecero/" . $slug . ".php";
+
+    // EL CONTENIDO DEL ARCHIVO PHP QUE SE VA A GENERAR
+    $contenidoPHP = "<?php
+\$titulo = '" . addslashes($titulo) . "';
+\$cuerpo = '" . addslashes($cuerpo) . "';
+\$imagen = '" . addslashes($imagen) . "';
+?>
+<!DOCTYPE html>
+<html lang='es'>
+<head>
+    <meta charset='UTF-8'>
+    <title><?php echo \$titulo; ?></title>
+    <style>body{font-family:Verdana; padding:50px;} .cont{max-width:800px; margin:auto;}</style>
+</head>
+<body>
+    <div class='cont'>
+        <h1><?php echo \$titulo; ?></h1>
+        <?php if(\$imagen): ?><img src='<?php echo \$imagen; ?>' style='width:100%'><?php endif; ?>
+        <p><?php echo nl2br(\$cuerpo); ?></p>
+        <hr>
+        <h3>Comentarios</h3>
+        <form><input type='text' placeholder='Nombre'><br><textarea></textarea><br><button>Enviar</button></form>
+    </div>
+</body>
+</html>";
+
+    $encodedContent = base64_encode($contenidoPHP);
+
+    // LLAMADA A LA API DE GITHUB PARA CREAR EL ARCHIVO FÍSICO
+    $url = "https://api.github.com/repos/$repoOwner/$repoName/contents/$path";
     
-    $updateData = [
-        "fields" => [
-            "secreto" => ["stringValue" => $tokenSecreto],
-            "pendiente" => ["booleanValue" => false]
-        ]
-    ];
+    $data = json_encode([
+        "message" => "Creando noticia: $slug",
+        "content" => $encodedContent,
+        "branch" => "main"
+    ]);
 
-    $ch = curl_init($updateUrl);
+    $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PATCH");
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($updateData));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-    curl_exec($ch);
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        "Authorization: token $githubToken",
+        "User-Agent: Vercel-PHP-Script",
+        "Content-Type: application/json"
+    ]);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    $mensaje = "<div class='success'><b>NOTICIA CREADA EXITOSAMENTE</b><br>Ya disponible en: /noticias/informaticadesdecero/$slug</div>";
-    $superUserAuth = true; // Mantener sesión visual
-}
-
-// 4. CARGAR SOLICITUDES (Solo para Superusuario)
-$solicitudes = [];
-if ($superUserAuth) {
-    $urlGet = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/solicitudNoticia";
-    $jsonGet = @file_get_contents($urlGet);
-    if ($jsonGet) {
-        $resGet = json_decode($jsonGet, true);
-        $solicitudes = $resGet['documents'] ?? [];
+    if ($httpCode == 201) {
+        $mensaje = "<div style='color:green; padding:20px; border:2px solid green;'><b>¡CONSEGUIDO!</b> El archivo se ha creado en GitHub. Vercel se está actualizando (espera 1 minuto).</div>";
+    } else {
+        $mensaje = "<div style='color:red;'>Error al crear: " . $response . "</div>";
     }
 }
 ?>
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html>
 <head>
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-    <title>Creador de Noticias - Verdana Style</title>
-    <style>
-        body { font-family: Verdana, Geneva, sans-serif; background: #f0f0f0; margin: 0; padding: 0; }
-        .header { background: #000; color: #fff; padding: 30px; text-align: center; border-bottom: 5px solid #333; }
-        .container { max-width: 1000px; margin: 20px auto; background: #fff; padding: 40px; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
-        
-        /* Estilos Superusuario */
-        .super-login { background: #222; color: #fff; padding: 20px; border-radius: 5px; margin-bottom: 30px; }
-        .super-login input { padding: 10px; margin-right: 10px; border: none; font-family: Verdana; }
-        
-        /* Tabla */
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th { background: #eee; padding: 10px; text-align: left; border-bottom: 2px solid #000; }
-        td { padding: 15px; border-bottom: 1px solid #ddd; }
-
-        .btn-crear { background: #28a745; color: white; border: none; padding: 10px 20px; cursor: pointer; font-weight: bold; }
-        .btn-crear:hover { background: #218838; }
-
-        input[type="text"], textarea { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; font-family: Verdana; box-sizing: border-box; }
-        .btn-enviar { background: #000; color: #fff; padding: 20px; border: none; width: 100%; font-weight: bold; cursor: pointer; font-size: 16px; }
-
-        .success { background: #d4edda; color: #155724; padding: 20px; border-left: 6px solid #28a745; margin-bottom: 20px; }
-        .error { background: #f8d7da; color: #721c24; padding: 20px; border-left: 6px solid #dc3545; margin-bottom: 20px; }
-    </style>
+    <title>Panel de Creación Real</title>
+    <style>body{font-family:Verdana; background:#f4f4f4; padding:20px;} .box{background:#fff; padding:40px; max-width:600px; margin:auto; border-top:8px solid #000;}</style>
 </head>
 <body>
-
-<div class="header">
-    <h1 style="margin:0; font-size:35px;">INFORMATICADESDECERO</h1>
-    <span style="font-size:12px; letter-spacing:4px;">SISTEMA DE GESTIÓN DE NOTICIAS</span>
-</div>
-
-<div class="container">
-
-    <?php if (!$superUserAuth): ?>
-    <div class="super-login">
-        <strong>⚡ ACCESO SUPERUSUARIO:</strong>
-        <form method="POST" style="display:inline;">
-            <input type="text" name="user_name" placeholder="Usuario" required>
-            <input type="password" name="user_pass" placeholder="Password" required>
-            <button type="submit" name="login_super" style="background:#ff0; color:#000; font-weight:bold; cursor:pointer; padding:10px; border:none;">ENTRAR</button>
+    <div class="box">
+        <h1>CREAR NOTICIA FÍSICA</h1>
+        <?php echo $mensaje; ?>
+        
+        <form method="POST">
+            <label>Slug (nombre-archivo):</label>
+            <input type="text" name="slug" style="width:100%; padding:10px;" required>
+            
+            <label>Título:</label>
+            <input type="text" name="titulo_grande" style="width:100%; padding:10px;" required>
+            
+            <label>Cuerpo:</label>
+            <textarea name="cuerpo_noticia" style="width:100%; height:150px;" required></textarea>
+            
+            <label>URL Imagen:</label>
+            <input type="text" name="imagen_url" style="width:100%; padding:10px;">
+            
+            <button type="submit" name="crear_final" style="width:100%; background:#000; color:#fff; padding:20px; font-weight:bold; margin-top:20px; cursor:pointer;">
+                CREAR ARCHIVO .PHP EN GITHUB
+            </button>
         </form>
     </div>
-    <?php endif; ?>
-
-    <?php echo $mensaje; ?>
-
-    <?php if ($superUserAuth): ?>
-        <h2>Solicitudes Pendientes</h2>
-        <table>
-            <tr>
-                <th>Identificador</th>
-                <th>Título de Noticia</th>
-                <th>Acción</th>
-            </tr>
-            <?php foreach ($solicitudes as $doc): 
-                $f = $doc['fields'];
-                $slug = $f['nombre']['stringValue'] ?? 'n/a';
-                $tit = $f['titulo_grande']['stringValue'] ?? 'Sin título';
-                // Extraer ID del documento
-                $pathParts = explode('/', $doc['name']);
-                $idDoc = end($pathParts);
-                
-                // Solo mostrar si sigue pendiente
-                if (($f['pendiente']['booleanValue'] ?? true) == true):
-            ?>
-                <tr>
-                    <td><code><?php echo $slug; ?></code></td>
-                    <td><?php echo $tit; ?></td>
-                    <td>
-                        <form method="POST">
-                            <input type="hidden" name="doc_id" value="<?php echo $idDoc; ?>">
-                            <input type="hidden" name="slug" value="<?php echo $slug; ?>">
-                            <button type="submit" name="crear_final" class="btn-crear">ACEPTAR Y CREAR NOTICIA</button>
-                        </form>
-                    </td>
-                </tr>
-            <?php endif; endforeach; ?>
-        </table>
-        <hr style="margin:40px 0;">
-    <?php endif; ?>
-
-    <h2>Nueva Solicitud de Noticia</h2>
-    <form action="/api/loginPuesto/index.php?auth_token=<?php echo $tokenUrl; ?>" method="POST">
-        <label>Nombre de la noticia (Slug para la URL):</label>
-        <input type="text" name="nombre_noticia" placeholder="ej: mi-nueva-noticia" required>
-
-        <label>Título Principal:</label>
-        <input type="text" name="titulo_grande" placeholder="Escribe el titular..." required>
-
-        <label>Contenido de la Noticia:</label>
-        <textarea name="cuerpo_noticia" rows="8" placeholder="Escribe aquí el texto..." required></textarea>
-
-        <label>URL de Imagen:</label>
-        <input type="text" name="imagen_url" placeholder="https://...">
-
-        <button type="submit" class="btn-enviar">ENVIAR SOLICITUD A REVISIÓN</button>
-    </form>
-
-</div>
-
 </body>
 </html>
